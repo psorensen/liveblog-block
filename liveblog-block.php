@@ -58,3 +58,22 @@ function liveblog_liveblog_block_block_init() {
 	}
 }
 add_action( 'init', 'liveblog_liveblog_block_block_init' );
+
+/**
+ * Register the liveblog post meta.
+ */
+function liveblog_liveblog_block_register_post_meta() {
+	register_post_meta(
+		'',
+		'liveblog',
+		array(
+			'show_in_rest' => true,
+			'single'       => true,
+			'type'         => 'string',
+			'auth_callback' => function() {
+				return current_user_can( 'edit_posts' );
+			},
+		)
+	);
+}
+add_action( 'init', 'liveblog_liveblog_block_register_post_meta' );

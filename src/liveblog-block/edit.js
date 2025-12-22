@@ -1,7 +1,7 @@
 import { __ } from '@wordpress/i18n';
 import { useBlockProps } from '@wordpress/block-editor';
 import apiFetch from '@wordpress/api-fetch';
-import { useSelect } from '@wordpress/data';
+import { useSelect, useDispatch } from '@wordpress/data';
 import { useState, useEffect } from '@wordpress/element';
 import './editor.scss';
 
@@ -13,6 +13,10 @@ export default function Edit() {
 	const currentUser = useSelect((select) => {
 		return select('core').getCurrentUser?.() || null;
 	}, []);
+	const blocks = useSelect((select) => {
+		return select('core/block-editor').getBlocks();
+	}, []);
+	const { editPost } = useDispatch('core/editor');
 
 	const [comments, setComments] = useState(null);
 	const [newEntryContent, setNewEntryContent] = useState('');
@@ -21,6 +25,31 @@ export default function Edit() {
 	const [editingContent, setEditingContent] = useState('');
 	const [isUpdating, setIsUpdating] = useState(false);
 	const [deletingEntryId, setDeletingEntryId] = useState(null);
+
+	// Update post meta when block is present
+	useEffect(() => {
+		if (!postId) {
+			return;
+		}
+
+		const hasLiveblogBlock = (blockList) => {
+			for (const block of blockList) {
+				if (block.name === 'liveblog/liveblog-block') {
+					return true;
+				}
+				if (block.innerBlocks && block.innerBlocks.length > 0) {
+					if (hasLiveblogBlock(block.innerBlocks)) {
+						return true;
+					}
+				}
+			}
+			return false;
+		};
+
+		if (hasLiveblogBlock(blocks)) {
+			editPost({ meta: { liveblog: 'enable' } });
+		}
+	}, [postId, blocks, editPost]);
 
 	const formatTimestamp = (timestamp) => {
 		if (!timestamp) return '';
