@@ -50,6 +50,12 @@ function Edit() {
   const currentUser = (0,_wordpress_data__WEBPACK_IMPORTED_MODULE_3__.useSelect)(select => {
     return select('core').getCurrentUser?.() || null;
   }, []);
+  const blocks = (0,_wordpress_data__WEBPACK_IMPORTED_MODULE_3__.useSelect)(select => {
+    return select('core/block-editor').getBlocks();
+  }, []);
+  const {
+    editPost
+  } = (0,_wordpress_data__WEBPACK_IMPORTED_MODULE_3__.useDispatch)('core/editor');
   const [comments, setComments] = (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_4__.useState)(null);
   const [newEntryContent, setNewEntryContent] = (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_4__.useState)('');
   const [isSubmitting, setIsSubmitting] = (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_4__.useState)(false);
@@ -57,6 +63,33 @@ function Edit() {
   const [editingContent, setEditingContent] = (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_4__.useState)('');
   const [isUpdating, setIsUpdating] = (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_4__.useState)(false);
   const [deletingEntryId, setDeletingEntryId] = (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_4__.useState)(null);
+
+  // Update post meta when block is present
+  (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_4__.useEffect)(() => {
+    if (!postId) {
+      return;
+    }
+    const hasLiveblogBlock = blockList => {
+      for (const block of blockList) {
+        if (block.name === 'liveblog/liveblog-block') {
+          return true;
+        }
+        if (block.innerBlocks && block.innerBlocks.length > 0) {
+          if (hasLiveblogBlock(block.innerBlocks)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    };
+    if (hasLiveblogBlock(blocks)) {
+      editPost({
+        meta: {
+          liveblog: 'enable'
+        }
+      });
+    }
+  }, [postId, blocks, editPost]);
   const formatTimestamp = timestamp => {
     if (!timestamp) return '';
     const date = new Date(timestamp * 1000);
