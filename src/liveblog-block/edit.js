@@ -3,6 +3,12 @@ import { useBlockProps } from '@wordpress/block-editor';
 import apiFetch from '@wordpress/api-fetch';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { useState, useEffect } from '@wordpress/element';
+import { useEditor, EditorContent } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import Bold from '@tiptap/extension-bold';
+import Italic from '@tiptap/extension-italic';
+import Blockquote from '@tiptap/extension-blockquote';
+import Image from '@tiptap/extension-image';
 import './editor.scss';
 
 export default function Edit() {
@@ -19,12 +25,160 @@ export default function Edit() {
 	const { editPost } = useDispatch('core/editor');
 
 	const [comments, setComments] = useState(null);
-	const [newEntryContent, setNewEntryContent] = useState('');
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [editingEntryId, setEditingEntryId] = useState(null);
-	const [editingContent, setEditingContent] = useState('');
 	const [isUpdating, setIsUpdating] = useState(false);
 	const [deletingEntryId, setDeletingEntryId] = useState(null);
+
+	const newEntryEditor = useEditor({
+		extensions: [
+			StarterKit.configure({
+				bold: false,
+				italic: false,
+				blockquote: false,
+			}),
+			Bold.configure({
+				HTMLAttributes: {
+					class: 'liveblog-bold',
+				},
+			}),
+			Italic.configure({
+				HTMLAttributes: {
+					class: 'liveblog-italic',
+				},
+			}),
+			Blockquote.configure({
+				HTMLAttributes: {
+					class: 'liveblog-blockquote',
+				},
+			}),
+			Image.configure({
+				inline: true,
+				allowBase64: true,
+			}),
+		],
+		content: '',
+		editorProps: {
+			attributes: {
+				class: 'liveblog-editor-content',
+			},
+		},
+	});
+
+	const editingEditor = useEditor({
+		extensions: [
+			StarterKit.configure({
+				bold: false,
+				italic: false,
+				blockquote: false,
+			}),
+			Bold.configure({
+				HTMLAttributes: {
+					class: 'liveblog-bold',
+				},
+			}),
+			Italic.configure({
+				HTMLAttributes: {
+					class: 'liveblog-italic',
+				},
+			}),
+			Blockquote.configure({
+				HTMLAttributes: {
+					class: 'liveblog-blockquote',
+				},
+			}),
+			Image.configure({
+				inline: true,
+				allowBase64: true,
+			}),
+		],
+		content: '',
+		editorProps: {
+			attributes: {
+				class: 'liveblog-editor-content',
+			},
+		},
+	});
+
+	const Toolbar = ({ editor }) => {
+		if (!editor) {
+			return null;
+		}
+
+		const handleImageInsert = () => {
+			// Check if wp.media is available
+			if (typeof wp === 'undefined' || !wp.media) {
+				console.error('WordPress media library is not available');
+				// Fallback to URL prompt
+				const url = window.prompt(__('Enter image URL:', 'liveblog-block'));
+				if (url) {
+					editor.chain().focus().setImage({ src: url }).run();
+				}
+				return;
+			}
+
+			// Create media frame
+			const mediaFrame = wp.media({
+				title: __('Select or Upload Image', 'liveblog-block'),
+				button: {
+					text: __('Use this image', 'liveblog-block'),
+				},
+				multiple: false,
+				library: {
+					type: 'image',
+				},
+			});
+
+			// Handle selection
+			mediaFrame.on('select', () => {
+				const attachment = mediaFrame.state().get('selection').first().toJSON();
+				if (attachment && attachment.url) {
+					editor.chain().focus().setImage({ src: attachment.url }).run();
+				}
+			});
+
+			// Open media frame
+			mediaFrame.open();
+		};
+
+		return (
+			<div className="liveblog-toolbar">
+				<button
+					type="button"
+					onClick={() => editor.chain().focus().toggleBold().run()}
+					disabled={!editor.can().chain().focus().toggleBold().run()}
+					className={editor.isActive('bold') ? 'is-active' : ''}
+					title={__('Bold (Cmd/Ctrl+B)', 'liveblog-block')}
+				>
+					{__('Bold', 'liveblog-block')}
+				</button>
+				<button
+					type="button"
+					onClick={() => editor.chain().focus().toggleItalic().run()}
+					disabled={!editor.can().chain().focus().toggleItalic().run()}
+					className={editor.isActive('italic') ? 'is-active' : ''}
+					title={__('Italic (Cmd/Ctrl+I)', 'liveblog-block')}
+				>
+					{__('Italic', 'liveblog-block')}
+				</button>
+				<button
+					type="button"
+					onClick={() => editor.chain().focus().toggleBlockquote().run()}
+					className={editor.isActive('blockquote') ? 'is-active' : ''}
+					title={__('Quote', 'liveblog-block')}
+				>
+					{__('Quote', 'liveblog-block')}
+				</button>
+				<button
+					type="button"
+					onClick={handleImageInsert}
+					title={__('Insert Image', 'liveblog-block')}
+				>
+					{__('Image', 'liveblog-block')}
+				</button>
+			</div>
+		);
+	};
 
 	// Update post meta when block is present
 	useEffect(() => {
@@ -146,10 +300,27 @@ export default function Edit() {
 		fetchEntries();
 	}, [postId]);
 
+	// Cleanup editors on unmount
+	useEffect(() => {
+		return () => {
+			if (newEntryEditor) {
+				newEntryEditor.destroy();
+			}
+			if (editingEditor) {
+				editingEditor.destroy();
+			}
+		};
+	}, [newEntryEditor, editingEditor]);
+
 	const handleSubmit = async (e) => {
 		e.preventDefault();
 		
-		if (!newEntryContent.trim() || !postId || isSubmitting) {
+		if (!newEntryEditor || !postId || isSubmitting) {
+			return;
+		}
+
+		const content = newEntryEditor.getHTML();
+		if (!content || content.trim() === '' || content === '<p></p>') {
 			return;
 		}
 
@@ -159,7 +330,7 @@ export default function Edit() {
 			const requestData = {
 				crud_action: 'insert',
 				post_id: postId,
-				content: newEntryContent,
+				content: content,
 			};
 
 			if (currentUser?.id) {
@@ -172,7 +343,7 @@ export default function Edit() {
 				data: requestData,
 			});
 
-			setNewEntryContent('');
+			newEntryEditor.commands.clearContent();
 			fetchEntries();
 		} catch (error) {
 			console.error('Error creating liveblog entry:', error);
@@ -183,16 +354,25 @@ export default function Edit() {
 
 	const handleEdit = (entry) => {
 		setEditingEntryId(entry.id);
-		setEditingContent(entry.content || '');
+		if (editingEditor) {
+			editingEditor.commands.setContent(entry.content || '');
+		}
 	};
 
 	const handleCancelEdit = () => {
 		setEditingEntryId(null);
-		setEditingContent('');
+		if (editingEditor) {
+			editingEditor.commands.clearContent();
+		}
 	};
 
 	const handleUpdate = async (entryId) => {
-		if (!editingContent.trim() || !postId || isUpdating) {
+		if (!editingEditor || !postId || isUpdating) {
+			return;
+		}
+
+		const content = editingEditor.getHTML();
+		if (!content || content.trim() === '' || content === '<p></p>') {
 			return;
 		}
 
@@ -203,7 +383,7 @@ export default function Edit() {
 				crud_action: 'update',
 				post_id: postId,
 				entry_id: entryId,
-				content: editingContent,
+				content: content,
 			};
 
 			if (currentUser?.id) {
@@ -217,7 +397,7 @@ export default function Edit() {
 			});
 
 			setEditingEntryId(null);
-			setEditingContent('');
+			editingEditor.commands.clearContent();
 			fetchEntries();
 		} catch (error) {
 			console.error('Error updating liveblog entry:', error);
@@ -268,23 +448,22 @@ export default function Edit() {
 			<h3>Liveblog Entries ({comments.length})</h3>
 			
 			<form onSubmit={handleSubmit} style={{ marginBottom: '20px' }}>
-				<textarea
-					value={newEntryContent}
-					onChange={(e) => setNewEntryContent(e.target.value)}
-					placeholder={__('Write a new liveblog entry...', 'liveblog-block')}
-					rows={4}
+				{newEntryEditor && <Toolbar editor={newEntryEditor} />}
+				<div
 					style={{
 						width: '100%',
 						padding: '8px',
 						marginBottom: '10px',
-						fontFamily: 'inherit',
-						fontSize: '14px',
+						border: '1px solid #ddd',
+						borderRadius: '3px',
+						minHeight: '100px',
 					}}
-					disabled={isSubmitting}
-				/>
+				>
+					{newEntryEditor && <EditorContent editor={newEntryEditor} />}
+				</div>
 				<button
 					type="submit"
-					disabled={!newEntryContent.trim() || isSubmitting}
+					disabled={!newEntryEditor || isSubmitting || !newEntryEditor.getHTML() || newEntryEditor.getHTML().trim() === '' || newEntryEditor.getHTML() === '<p></p>'}
 					style={{
 						padding: '8px 16px',
 						backgroundColor: '#2271b1',
@@ -363,22 +542,22 @@ export default function Edit() {
 					</div>
 					{editingEntryId === entry.id ? (
 						<div>
-							<textarea
-								value={editingContent}
-								onChange={(e) => setEditingContent(e.target.value)}
-								rows={4}
+							{editingEditor && <Toolbar editor={editingEditor} />}
+							<div
 								style={{
 									width: '100%',
 									padding: '8px',
 									marginBottom: '10px',
-									fontFamily: 'inherit',
-									fontSize: '14px',
+									border: '1px solid #ddd',
+									borderRadius: '3px',
+									minHeight: '100px',
 								}}
-								disabled={isUpdating}
-							/>
+							>
+								{editingEditor && <EditorContent editor={editingEditor} />}
+							</div>
 							<button
 								onClick={() => handleUpdate(entry.id)}
-								disabled={!editingContent.trim() || isUpdating}
+								disabled={!editingEditor || isUpdating || !editingEditor.getHTML() || editingEditor.getHTML().trim() === '' || editingEditor.getHTML() === '<p></p>'}
 								style={{
 									padding: '8px 16px',
 									backgroundColor: '#2271b1',
